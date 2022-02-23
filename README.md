@@ -2,4 +2,6 @@
 moteur 3D
 
 ## comilation
-git clone 
+git clone https://github.com/ge8u/tinyrenderer.git
+make
+./main
