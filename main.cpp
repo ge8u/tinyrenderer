@@ -91,14 +91,15 @@ int main(int argc, char** argv) {
     for (int i=0; i<model->nfaces(); i++) {
         std::vector<int> face = model->face(i);
         Vec3f pts[3];
+        Vec2f pts_texture;
         for (int i=0; i<3; i++) pts[i] = world2screen(model->vert(face[i]));
-        Vec3f edge1=pts[2]-pts[0];
-        Vec3f edge2=pts[1]-pts[0];
-        Vec3f n = Vec3f(edge1.y*edge2.z-edge1.z*edge2.y,edge1.z*edge2.x-edge1.x*edge2.z,edge1.x*edge2.y-edge1.y*edge2.x);
+        Vec3f edge1=model->vert(face[2])-model->vert(face[0]);
+        Vec3f edge2=model->vert(face[1])-model->vert(face[0]);
+        Vec3f n = cross(edge1,edge2);
         n.normalize();
         float intensity = n*light_dir;
         if(intensity>0){
-            triangle(pts, zbuffer, image, TGAColor(rand()%255,rand()%255,rand()%255,255));
+            triangle(pts, zbuffer, image,TGAColor(255*intensity,255*intensity,255*intensity));
         }
     }
 
