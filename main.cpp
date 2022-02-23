@@ -1,83 +1,109 @@
+#include <vector>
+#include <cmath>
+#include <cstdlib>
 #include <limits>
+#include "tgaimage.h"
 #include "model.h"
-#include "our_gl.h"
+#include "geometry.h"
 
-constexpr int width  = 800; // output image size
-constexpr int height = 800;
+const TGAColor white = TGAColor(255, 255, 255, 255);
+const TGAColor red   = TGAColor(255, 0,   0,   255);
+Model *model = NULL;
+const int width  = 800;
+const int height = 800;
 
-const vec3 light_dir(1,1,1); // light source
-const vec3       eye(1,1,3); // camera position
-const vec3    center(0,0,0); // camera direction
-const vec3        up(0,1,0); // camera up vector
-
-extern mat<4,4> ModelView; // "OpenGL" state matrices
-extern mat<4,4> Projection;
-
-struct Shader : IShader {
-    const Model &model;
-    vec3 uniform_l;       // light direction in view coordinates
-    mat<2,3> varying_uv;  // triangle uv coordinates, written by the vertex shader, read by the fragment shader
-    mat<3,3> varying_nrm; // normal per vertex to be interpolated by FS
-    mat<3,3> view_tri;    // triangle in view coordinates
-
-    Shader(const Model &m) : model(m) {
-        uniform_l = proj<3>((ModelView*embed<4>(light_dir, 0.))).normalize(); // transform the light vector to view coordinates
+void line(int x0, int y0, int x1, int y1, TGAImage &image, TGAColor color) {
+    bool steep = false;
+    if (std::abs(x0-x1)<std::abs(y0-y1)) {
+        std::swap(x0, y0);
+        std::swap(x1, y1);
+        steep = true;
+    }
+    if (x0>x1) {
+        std::swap(x0, x1);
+        std::swap(y0, y1);
     }
 
-    virtual void vertex(const int iface, const int nthvert, vec4& gl_Position) {
-        varying_uv.set_col(nthvert, model.uv(iface, nthvert));
-        varying_nrm.set_col(nthvert, proj<3>((ModelView).invert_transpose()*embed<4>(model.normal(iface, nthvert), 0.)));
-        gl_Position= ModelView*embed<4>(model.vert(iface, nthvert));
-        view_tri.set_col(nthvert, proj<3>(gl_Position));
-        gl_Position = Projection*gl_Position;
-    }
-
-    virtual bool fragment(const vec3 bar, TGAColor &gl_FragColor) {
-        vec3 bn = (varying_nrm*bar).normalize(); // per-vertex normal interpolation
-        vec2 uv = varying_uv*bar; // tex coord interpolation
-
-        // for the math refer to the tangent space normal mapping lecture
-        // https://github.com/ssloy/tinyrenderer/wiki/Lesson-6bis-tangent-space-normal-mapping
-        mat<3,3> AI = mat<3,3>{ {view_tri.col(1) - view_tri.col(0), view_tri.col(2) - view_tri.col(0), bn} }.invert();
-        vec3 i = AI * vec3(varying_uv[0][1] - varying_uv[0][0], varying_uv[0][2] - varying_uv[0][0], 0);
-        vec3 j = AI * vec3(varying_uv[1][1] - varying_uv[1][0], varying_uv[1][2] - varying_uv[1][0], 0);
-        mat<3,3> B = mat<3,3>{ {i.normalize(), j.normalize(), bn} }.transpose();
-
-        vec3 n = (B * model.normal(uv)).normalize(); // transform the normal from the texture to the tangent space
-        double diff = std::max(0., n*uniform_l); // diffuse light intensity
-        vec3 r = (n*(n*uniform_l)*2 - uniform_l).normalize(); // reflected light direction, specular mapping is described here: https://github.com/ssloy/tinyrenderer/wiki/Lesson-6-Shaders-for-the-software-renderer
-        double spec = std::pow(std::max(-r.z, 0.), 5+sample2D(model.specular(), uv)[0]); // specular intensity, note that the camera lies on the z-axis (in view), therefore simple -r.z
-
-        TGAColor c = sample2D(model.diffuse(), uv);
-        for (int i : {0,1,2})
-            gl_FragColor[i] = std::min<int>(10 + c[i]*(diff + spec), 255); // (a bit of ambient light, diff + spec), clamp the result
-
-        return false; // the pixel is not discarded
-    }
-};
-
-int main(int argc, char** argv) {
-    if (2>argc) {
-        std::cerr << "Usage: " << argv[0] << " obj/model.obj" << std::endl;
-        return 1;
-    }
-    TGAImage framebuffer(width, height, TGAImage::RGB); // the output image
-    lookat(eye, center, up);                            // build the ModelView matrix
-    viewport(width/8, height/8, width*3/4, height*3/4); // build the Viewport matrix
-    projection((eye-center).norm());                    // build the Projection matrix
-    std::vector<double> zbuffer(width*height, std::numeric_limits<double>::max());
-
-    for (int m=1; m<argc; m++) { // iterate through all input objects
-        Model model(argv[m]);
-        Shader shader(model);
-        for (int i=0; i<model.nfaces(); i++) { // for every triangle
-            vec4 clip_vert[3]; // triangle coordinates (clip coordinates), written by VS, read by FS
-            for (int j : {0,1,2})
-                shader.vertex(i, j, clip_vert[j]); // call the vertex shader for each triangle vertex
-            triangle(clip_vert, shader, framebuffer, zbuffer); // actual rasterization routine call
+    for (int x=x0; x<=x1; x++) {
+        float t = (x-x0)/(float)(x1-x0);
+        int y = y0*(1.-t) + y1*t;
+        if (steep) {
+            image.set(y, x, color);
+        } else {
+            image.set(x, y, color);
         }
     }
-    framebuffer.write_tga_file("framebuffer.tga"); // the vertical flip is moved inside the function
-    return 0;
 }
 
+Vec3f barycentric(Vec3f A, Vec3f B, Vec3f C, Vec3f P) {
+    Vec3f s[2];
+    for (int i=2; i--; ) {
+        s[i][0] = C[i]-A[i];
+        s[i][1] = B[i]-A[i];
+        s[i][2] = A[i]-P[i];
+    }
+    Vec3f u = cross(s[0], s[1]);
+    if (std::abs(u[2])>1e-2) // dont forget that u[2] is integer. If it is zero then triangle ABC is degenerate
+        return Vec3f(1.f-(u.x+u.y)/u.z, u.y/u.z, u.x/u.z);
+    return Vec3f(-1,1,1); // in this case generate negative coordinates, it will be thrown away by the rasterizator
+}
+
+void triangle(Vec3f *pts, float *zbuffer, TGAImage &image, TGAColor color) {
+    Vec2f bboxmin( std::numeric_limits<float>::max(),  std::numeric_limits<float>::max());
+    Vec2f bboxmax(-std::numeric_limits<float>::max(), -std::numeric_limits<float>::max());
+    Vec2f clamp(image.get_width()-1, image.get_height()-1);
+    for (int i=0; i<3; i++) {
+        for (int j=0; j<2; j++) {
+            bboxmin[j] = std::max(0.f,      std::min(bboxmin[j], pts[i][j]));
+            bboxmax[j] = std::min(clamp[j], std::max(bboxmax[j], pts[i][j]));
+        }
+    }
+    Vec3f P;
+    for (P.x=bboxmin.x; P.x<=bboxmax.x; P.x++) {
+        for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
+            Vec3f bc_screen  = barycentric(pts[0], pts[1], pts[2], P);
+            if (bc_screen.x<0 || bc_screen.y<0 || bc_screen.z<0) continue;
+            P.z = 0;
+            for (int i=0; i<3; i++) P.z += pts[i][2]*bc_screen[i];
+            if (zbuffer[int(P.x+P.y*width)]<P.z) {
+                zbuffer[int(P.x+P.y*width)] = P.z;
+                image.set(P.x, P.y, color);
+            }
+        }
+    }
+}
+
+Vec3f world2screen(Vec3f v) {
+    return Vec3f(int((v.x+1.)*width/2.+.5), int((v.y+1.)*height/2.+.5), v.z);
+}
+
+int main(int argc, char** argv) {
+    if (2==argc) {
+        model = new Model(argv[1]);
+    } else {
+        model = new Model("obj/african_head/african_head.obj");
+    }
+
+    float *zbuffer = new float[width*height];
+    for (int i=width*height; i--; zbuffer[i] = -std::numeric_limits<float>::max());
+    TGAImage image(width, height, TGAImage::RGB);
+    Vec3f light_dir(0,0,-1);
+    for (int i=0; i<model->nfaces(); i++) {
+        std::vector<int> face = model->face(i);
+        Vec3f pts[3];
+        for (int i=0; i<3; i++) pts[i] = world2screen(model->vert(face[i]));
+        Vec3f edge1=pts[2]-pts[0];
+        Vec3f edge2=pts[1]-pts[0];
+        Vec3f n = Vec3f(edge1.y*edge2.z-edge1.z*edge2.y,edge1.z*edge2.x-edge1.x*edge2.z,edge1.x*edge2.y-edge1.y*edge2.x);
+        n.normalize();
+        float intensity = n*light_dir;
+        if(intensity>0){
+            triangle(pts, zbuffer, image, TGAColor(rand()%255,rand()%255,rand()%255,255));
+        }
+    }
+
+    image.flip_vertically(); // i want to have the origin at the left bottom corner of the image
+    image.write_tga_file("output.tga");
+    delete model;
+    return 0;
+}
