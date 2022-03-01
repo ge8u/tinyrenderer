@@ -9,4 +9,4 @@ make
 ./main
 ```
 ## résultat:
-![](https://github.com/ge8u/tinyrayrender/output.tga)
+![](https://github.com/ge8u/tinyrenderer/blob/main/output.tga)
