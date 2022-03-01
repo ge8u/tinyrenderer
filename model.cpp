@@ -20,15 +20,31 @@ Model::Model(const char *filename) : verts_(), faces_() {
             Vec3f v;
             for (int i=0;i<3;i++) iss >> v[i];
             verts_.push_back(v);
-        } else if (!line.compare(0, 2, "f ")) {
-            std::vector<int> f;
-            int itrash, idx;
+        } else if (!line.compare(0, 3, "vt ")) {
+            iss >> trash >> trash;
+            Vec2f uv;
+            for (int i=0;i<2;i++) iss >> uv[i];
+            textures_.push_back({uv.x,1-uv.y});
+        } else if (!line.compare(0, 3, "vn ")) {
+            iss >> trash >> trash;
+            Vec3f n;
+            for (int i=0;i<3;i++) iss >> n[i];
+            normals_.push_back(n.normalize());
+        }else if (!line.compare(0, 2, "f ")) {
+            int f,t,n;
             iss >> trash;
-            while (iss >> idx >> trash >> itrash >> trash >> itrash) {
-                idx--; // in wavefront obj all indices start at 1, not zero
-                f.push_back(idx);
+            int cnt = 0;
+            while (iss >> f >> trash >> t >> trash >> n) {
+                facet_vrt.push_back(--f);
+                facet_tex.push_back(--t);
+                facet_nrm.push_back(--n);
+                cnt++;
             }
-            faces_.push_back(f);
+            if (3!=cnt) {
+                std::cerr << "Error: the obj file is supposed to be triangulated" << std::endl;
+                in.close();
+                return;
+            }
         }
     }
     std::cerr << "# v# " << verts_.size() << " f# "  << faces_.size() << std::endl;
@@ -41,14 +57,19 @@ int Model::nverts() {
     return (int)verts_.size();
 }
 
+
 int Model::nfaces() {
-    return (int)faces_.size();
+    return facet_vrt.size()/3;
 }
 
-std::vector<int> Model::face(int idx) {
-    return faces_[idx];
+Vec3f Model::vert(int iface, int nthvert) {
+    return verts_[facet_vrt[iface*3+nthvert]];
 }
 
-Vec3f Model::vert(int i) {
-    return verts_[i];
+Vec2f Model::texture( int iface,  int nthvert)  {
+    return textures_[facet_tex[iface*3+nthvert]];
+}
+
+Vec3f Model::normal(int iface, int nthvert) {
+    return normals_[facet_nrm[iface*3+nthvert]];
 }
