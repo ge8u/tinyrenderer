@@ -8,6 +8,6 @@ cd tinyrenderer
 make
 ./main
 ```
-## résultat:
+# résultat:
 diablo
 ![](https://github.com/ge8u/tinyrenderer/blob/main/output.tga)
