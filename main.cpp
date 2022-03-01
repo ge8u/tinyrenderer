@@ -71,12 +71,9 @@ void triangle(Vec3f *pts, float *zbuffer, TGAImage &imageTexture,TGAImage &image
             if (zbuffer[int(P.x+P.y*width)]<P.z) {
                 zbuffer[int(P.x+P.y*width)] = P.z;
                 //texture
-                TGAColor colorX=imageTexture.get(texture[0].x,texture[0].y)*bc_screen.x;
-                TGAColor colorY=imageTexture.get(texture[1].x,texture[1].y)*bc_screen.y;
-                TGAColor colorZ=imageTexture.get(texture[2].x,texture[2].y)*bc_screen.z;
-                float colorRenderX=colorX[2]+colorY[2]+colorZ[2];
-                float colorRenderY=colorX[1]+colorY[1]+colorZ[1];
-                float colorRenderZ=colorX[0]+colorY[0]+colorZ[0];
+                float textX=bc_screen.x*texture[0].x+bc_screen.y*texture[1].x+bc_screen.z*texture[2].x;
+                float textY=bc_screen.x*texture[0].y+bc_screen.y*texture[1].y+bc_screen.z*texture[2].y;
+                TGAColor color=imageTexture.get(textX,textY);
                 //itensity
                 Vec3f light_dir(0,0,-1);
                 float normalX=bc_screen.x*normal[0].x+bc_screen.y*normal[1].x+bc_screen.z*normal[2].x;
@@ -85,7 +82,7 @@ void triangle(Vec3f *pts, float *zbuffer, TGAImage &imageTexture,TGAImage &image
                 Vec3f n=Vec3f(normalX,normalY,normalZ).normalize();
                 float  intensity= abs(n*light_dir);
                 //shader
-                image.set(P.x, P.y, TGAColor(colorRenderX*intensity,colorRenderY*intensity,colorRenderZ*intensity));
+                image.set(P.x, P.y, TGAColor(color[2]*intensity,color[1]*intensity,color[0]*intensity));
             }
         }
     }
@@ -95,7 +92,7 @@ Vec3f world2screen(Vec3f v) {
     return Vec3f(int((v.x+1.)*width/2.+.5), int((v.y+1.)*height/2.+.5), v.z);
 }
 
-Vec2f world2screen2(Vec2f v) {
+Vec2f coordTexture(Vec2f v) {
     return Vec2f(float(v.x*1024),float(v.y*1024));
 }
 
@@ -118,7 +115,7 @@ int main(int argc, char** argv) {
         Vec3f pts_normal[3];
         for (int j=0; j<3; j++){ 
             pts[j] = world2screen(model->vert(i,j));
-            pts_texture[j] = world2screen2(model->texture(i,j));
+            pts_texture[j] = coordTexture(model->texture(i,j));
             pts_normal[j]=model->normal(i,j);
         }
         triangle(pts, zbuffer,imageTexture,image,pts_texture,pts_normal);
