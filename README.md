@@ -8,3 +8,5 @@ cd tinyrenderer
 make
 ./main
 ```
+## résultat:
+![](https://github.com/ge8u/tinyrayrender/output.tga)
